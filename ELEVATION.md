@@ -1,4 +1,4 @@
-# RallyQuery — 9-10 Elevation Backlog
+# TourQuery — 9-10 Elevation Backlog
 
 The base build (`PLAN.md`, steps 0-19) gets this project to a strong ~8/10:
 a well-engineered, production-shaped NL→SQL agent with guardrails, eval, and
@@ -11,8 +11,8 @@ Track status here so nothing gets lost across sessions.
 
 | # | Upgrade | Why it matters | Status |
 |---|---|---|---|
-| 1 | **Real CV→data pipeline bridge** — feed `rallies`/`shots` tables from actual tracked output (even a small YOLO/pose model run on sample rally footage, or a public tracking dataset), not pure Faker | Turns the sports theme from *narrative* branding into a *technical* bridge between the resume's CV work and this GenAI project — the single highest-leverage change, and a rare combination (real-time CV + agentic LLM systems) | not started |
-| 2 | **Real, messy public data** — merge in real ATP/WTA match/ranking data alongside synthetic rally/shot detail | Real data has real inconsistencies the guardrails/introspection must survive — more defensible than self-generated messiness | not started |
+| 1 | ~~Real CV→data pipeline bridge~~ — dropped | Dropped entirely: the project no longer uses a sports-tracking/CV-pipeline narrative at all (see PROGRESS.md 2026-09-21 entry) — `rallies`/`shots` tables are kept in the schema but intentionally left empty, not fed from any pipeline, real or synthetic | dropped — not pursuing |
+| 2 | **Real, messy public data** — merge in real ATP match/ranking data | Real data has real inconsistencies the guardrails/introspection must survive — more defensible than self-generated messiness | done — pulled forward into Step 1 (see PROGRESS.md) |
 | 3 | **Public usage + real failure cases** — share the live demo somewhere real (community, LinkedIn), collect actual questions people ask, fold failures into the eval set | "Here are real failures a stranger hit and how I fixed them" beats a self-authored eval set; shows product thinking, not just engineering | not started |
 | 4 | **Deeper agent reasoning** — clarifying-question behavior for genuinely ambiguous queries instead of guessing; decomposition of complex analytical questions into sub-queries | Shows agent *design*, not just a generate→validate→retry loop | not started |
 | 5 | **Adversarial security pass** — documented red-team attempts against the guardrails (prompt injection, SQL injection, jailbreaks), mapped to OWASP LLM Top 10, with what got through vs. blocked | Almost no portfolio projects show adversarial testing against their own claimed guardrails — this is a credibility multiplier | not started |
@@ -20,10 +20,8 @@ Track status here so nothing gets lost across sessions.
 
 ## Sequencing guidance
 
-Item 1 should be considered early if pursued at all — it affects the seed
-data step (Step 1 in PLAN.md), so retrofitting it later means re-touching
-the DB layer. Items 2-6 can be layered on after the base agent works without
-disrupting earlier steps.
+Item 2 is done (pulled forward into Step 1). Item 1 is dropped. Items 3-6 can
+be layered on after the base agent works without disrupting earlier steps.
 
 None of these block shipping the base plan. The user is handling overall
 tiering/prioritization directly — this file exists so the upgrade ideas
