@@ -1,10 +1,9 @@
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
-from tourquery.config import settings
+from tourquery.llm import PROVIDER, SQL_MODEL, chat_model
 
-CHAT_MODEL = "gemini-3.8-flash"  # pinned: "-latest" aliases can change under you and break eval comparisons
+CHAT_MODEL = SQL_MODEL
 
 
 class GeneratedSQL(BaseModel):
@@ -59,7 +58,11 @@ different name for the same concept.
 - If the user asks you to change data or schema (add, update, delete, \
 drop, etc.), or asks something unrelated to this tennis database, do NOT \
 rewrite it into a read query. Set `refusal` to a short reason and leave \
-`sql` empty.
+`sql` empty. Examples that must be refused, not answered with a SELECT:
+  - "Change Alcaraz's nationality to USA." -> refusal (asks to change data)
+  - "Remove every match from 2023." -> refusal (asks to change data)
+  - "Add a new player called John Smith." -> refusal (asks to change data)
+  - "What's the weather in Paris?" -> refusal (unrelated to the database)
 - Greetings, thanks and small talk are not refusals. Set `reply` to a \
 short friendly answer that suggests a few example questions about ATP \
 players, matches or rankings, and leave `sql` empty.
@@ -78,6 +81,25 @@ INTERVAL. Compare it to a plain number: `end_date - start_date > 30`.
 - Filter a year with a date range (`match_date >= '2024-01-01' AND \
 match_date < '2025-01-01'`) rather than EXTRACT.
 - Player names are split into first_name and last_name columns.
+- Match names (players, tournaments) case-insensitively with ILIKE, since \
+capitalisation in the data is inconsistent and may not match how people \
+usually write a name.
+- To answer "how many X meet a condition" where the condition needs \
+GROUP BY ... HAVING, put the grouping in a subquery and count its rows in \
+the outer query: `SELECT COUNT(*) FROM (SELECT ... GROUP BY ... HAVING ...) \
+AS x`. Selecting COUNT(...) next to GROUP BY returns one row per group, not \
+the total.
+- AND binds tighter than OR. When combining OR conditions with other \
+filters, wrap the OR part in parentheses: \
+`(player1_id = x OR player2_id = x) AND match_date >= '2024-01-01'`.
+
+Tennis notes:
+- Winning a tournament (a title) means winning its final: the match with \
+round = 'F'. Winning any other match is not winning the tournament.
+- Round codes: F = final, SF = semifinal, QF = quarterfinal, R16/R32/R64/R128 \
+= earlier rounds, RR = round robin (e.g. Tour Finals), BR = bronze-medal match.
+- A player's matches are those where they are player1_id or player2_id; they \
+won the match if winner_id is their player_id.
 
 Schema:
 {schema_context}
@@ -101,8 +123,12 @@ prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-llm = ChatGoogleGenerativeAI(model=CHAT_MODEL, google_api_key=settings.google_gemini_api_key)
-chain = prompt | llm.with_structured_output(GeneratedSQL)
+# OpenAI's strict JSON-schema mode rejects optional fields like `refusal`,
+# so it uses plain function calling.
+structured_llm = chat_model(SQL_MODEL, max_tokens=1000).with_structured_output(
+    GeneratedSQL, **({"method": "function_calling"} if PROVIDER == "openai" else {})
+)
+chain = prompt | structured_llm
 
 
 def _format_history(history: list[dict]) -> str:

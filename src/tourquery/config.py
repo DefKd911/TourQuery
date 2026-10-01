@@ -16,8 +16,14 @@ class Settings(BaseSettings):
     """Conversation-memory role. Can only write to the agent_memory schema; no access to tennis tables."""
 
     google_gemini_api_key: str
+    """Always needed: schema embeddings use Gemini whichever chat provider is chosen."""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+
+    llm_provider: str = "gemini"
+    """Chat model provider for SQL generation and summaries: "gemini", "openai" or "anthropic"."""
+    sql_model: str = ""
+    """Optional: override the provider's default SQL model (e.g. to compare models in evals)."""
 
     langsmith_api_key: str = ""
     """Optional. Tracing to LangSmith is on only when this is set."""

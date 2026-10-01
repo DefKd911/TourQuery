@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from sqlalchemy import text
 
@@ -19,19 +21,23 @@ TOP_K_QUERY = text("""
     LIMIT :top_k
 """)
 
-CHUNKS_FOR_TABLES_QUERY = text("""
-    SELECT table_name, chunk_text
-    FROM schema_embeddings
-    WHERE table_name = ANY(:tables)
-""")
+@lru_cache(maxsize=1)
+def _all_chunks() -> dict[str, str]:
+    """Every table's description, read once per process -- the schema doesn't
+    change while the app runs (re-run scripts/embed_schema.py and restart if it does)."""
+    with readonly_engine.connect() as conn:
+        rows = conn.execute(text("SELECT table_name, chunk_text FROM schema_embeddings")).all()
+    return {name: chunk for name, chunk in rows}
 
 
 def get_table_chunks(tables: list[str]) -> list[dict]:
-    if not tables:
-        return []
-    with readonly_engine.connect() as conn:
-        rows = conn.execute(CHUNKS_FOR_TABLES_QUERY, {"tables": tables}).mappings().all()
-    return [dict(row) for row in rows]
+    chunks = _all_chunks()
+    return [{"table_name": t, "chunk_text": chunks[t]} for t in tables if t in chunks]
+
+
+@lru_cache(maxsize=1)
+def _foreign_keys() -> dict[str, list[dict]]:
+    return get_foreign_keys_by_table()
 
 
 def _fk_neighbors(table: str, fks_by_table: dict[str, list[dict]]) -> set[str]:
@@ -67,7 +73,7 @@ def get_relevant_tables(question: str, top_k: int = 5, expand_via_fk: bool = Tru
         return results
 
     retrieved_names = {row["table_name"] for row in rows}
-    fks_by_table = get_foreign_keys_by_table()
+    fks_by_table = _foreign_keys()
     expansion_names = set()
     for name in retrieved_names:
         expansion_names |= _fk_neighbors(name, fks_by_table)

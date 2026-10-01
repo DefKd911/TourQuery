@@ -57,12 +57,19 @@ def run_case(case: dict) -> dict | None:
     if result.get("answer") == DEMO_LIMIT_MESSAGE:
         return None
 
-    passed, reason = score(case, result, gold_rows(case))
+    # The model API failing (overloaded, outage) says nothing about the agent's
+    # quality, so it's recorded as an error and left out of the accuracy score.
+    api_error = result.get("status") == "failed" and "LLM call failed" in str(result.get("answer"))
+    if api_error:
+        passed, reason = False, str(result.get("answer"))[:160]
+    else:
+        passed, reason = score(case, result, gold_rows(case))
     return {
         "id": case["id"],
         "category": case["category"],
         "question": case["question"],
         "passed": passed,
+        "api_error": api_error,
         "reason": reason,
         "status": result.get("status"),
         "sql": result.get("safe_sql"),
@@ -84,20 +91,32 @@ def save_results(results: dict) -> None:
     RESULTS.write_text(json.dumps(results, indent=2, default=str), encoding="utf-8")
 
 
-def print_summary(results: dict, case_ids: list[str]) -> None:
-    done = [results["cases"][i] for i in case_ids if i in results["cases"]]
-    if not done:
-        print("\nNo results yet.")
-        return
-    by_category = defaultdict(list)
-    for r in done:
-        by_category[r["category"]].append(r["passed"])
+def _is_api_error(r: dict) -> bool:
+    # Older results (before api_error was recorded) are detected from the message.
+    return r.get("api_error", "LLM call failed" in r.get("reason", ""))
 
-    passed = sum(r["passed"] for r in done)
-    print(f"\nAccuracy: {passed}/{len(done)} = {passed / len(done):.0%}"
-          f"   ({len(case_ids) - len(done)} of {len(case_ids)} cases not run yet)")
-    for category, outcomes in sorted(by_category.items()):
-        print(f"  {category:<14} {sum(outcomes)}/{len(outcomes)}")
+
+def print_summary(results: dict, case_ids: list[str]) -> None:
+    ran = [results["cases"][i] for i in case_ids if i in results["cases"]]
+    errored = [r for r in ran if _is_api_error(r)]
+    scored = [r for r in ran if not _is_api_error(r)]
+    if not scored:
+        print("\nNo scored results yet.")
+    else:
+        by_category = defaultdict(list)
+        for r in scored:
+            by_category[r["category"]].append(r["passed"])
+        passed = sum(r["passed"] for r in scored)
+        print(f"\nAccuracy: {passed}/{len(scored)} = {passed / len(scored):.0%}")
+        for category, outcomes in sorted(by_category.items()):
+            print(f"  {category:<14} {sum(outcomes)}/{len(outcomes)}")
+
+    not_run = len(case_ids) - len(ran)
+    if errored or not_run:
+        print(f"Not scored: {len(errored)} hit a model API error, {not_run} not run yet.")
+    if errored:
+        print(f"  Re-run with: --ids {','.join(r['id'] for r in errored)}")
+    done = scored
 
     durations = sorted(r["duration_ms"] for r in done if r.get("duration_ms"))
     if durations:
@@ -136,7 +155,7 @@ def main() -> None:
             break
         results["cases"][case["id"]] = outcome
         save_results(results)
-        mark = "PASS" if outcome["passed"] else "FAIL"
+        mark = "ERR" if outcome["api_error"] else ("PASS" if outcome["passed"] else "FAIL")
         print(f"  {mark:<4} {case['id']:<28} {time.perf_counter() - started:5.1f}s  "
               f"attempts={outcome['attempts']}  {outcome['reason']}")
 

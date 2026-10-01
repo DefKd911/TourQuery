@@ -2,13 +2,10 @@ from typing import Any
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from tourquery.config import settings
+from tourquery.llm import SUMMARY_MODEL, chat_model
 
-# Separate model from SQL generation: Gemini free-tier quota is counted per
-# model, and summarising a handful of rows doesn't need the stronger model.
-SYNTHESIS_MODEL = "gemini-3.5-flash-lite"
+SYNTHESIS_MODEL = SUMMARY_MODEL  # chosen per provider in llm.py
 MAX_ROWS_IN_PROMPT = 30
 
 SYSTEM_PROMPT = """\
@@ -39,8 +36,7 @@ Result ({row_summary}):
 """
 
 prompt = ChatPromptTemplate.from_messages([("system", SYSTEM_PROMPT), ("human", HUMAN_PROMPT)])
-llm = ChatGoogleGenerativeAI(model=SYNTHESIS_MODEL, google_api_key=settings.google_gemini_api_key)
-chain = prompt | llm | StrOutputParser()
+chain = prompt | chat_model(SYNTHESIS_MODEL, max_tokens=300) | StrOutputParser()
 
 
 def _format_table(columns: list[str], rows: list[list[Any]]) -> str:
