@@ -16,7 +16,10 @@ class GeneratedSQL(BaseModel):
         )
     )
     sql: str = Field(
-        description="A single Postgres SELECT statement that answers the question. Empty string if refusing."
+        description=(
+            "A single Postgres SELECT statement that answers the question. "
+            "Empty string if refusing or replying to small talk."
+        )
     )
     explanation: str = Field(
         description="One sentence explaining what the query does, in plain English."
@@ -29,11 +32,18 @@ class GeneratedSQL(BaseModel):
             "A short reason for the user. Leave null for normal questions."
         ),
     )
+    reply: str | None = Field(
+        default=None,
+        description=(
+            "Only for greetings, thanks or small talk (e.g. 'hi', 'thanks!'): a short friendly "
+            "reply that suggests 2-3 example questions. Leave null for real questions."
+        ),
+    )
 
 
 SYSTEM_PROMPT = """\
 You are a SQL generator for a Postgres database of ATP tennis data. You will \
-be given a natural-lnguage question and the schema (as text descriptions) \
+be given a natural-language question and the schema (as text descriptions) \
 of the tables that are relevant to it.
 
 Rules:
@@ -50,6 +60,9 @@ different name for the same concept.
 drop, etc.), or asks something unrelated to this tennis database, do NOT \
 rewrite it into a read query. Set `refusal` to a short reason and leave \
 `sql` empty.
+- Greetings, thanks and small talk are not refusals. Set `reply` to a \
+short friendly answer that suggests a few example questions about ATP \
+players, matches or rankings, and leave `sql` empty.
 - If the question cannot be answered with the given schema, or is \
 ambiguous, still produce your best-effort SQL, but say so plainly in the \
 explanation.

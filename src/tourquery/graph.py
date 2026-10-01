@@ -4,6 +4,7 @@
                    ^  |        |          |
                    |  |        +- error --+--> retry generate (max 3 attempts)
                    |  +-> refuse (asked to change data / off-topic) -> END
+                   |  +-> chat (greeting / small talk: friendly reply, no SQL) -> END
                    +----- give up after 3 attempts -> fail -> END
 
 Memory: every run belongs to a `thread_id`. A Postgres checkpointer saves the
@@ -65,6 +66,7 @@ class AgentState(TypedDict, total=False):
     sql: str | None
     explanation: str | None
     refusal: str | None
+    reply: str | None
     safe_sql: str | None
     error: str | None
     error_retryable: bool
@@ -82,6 +84,7 @@ FRESH_QUESTION_STATE: AgentState = {
     "sql": None,
     "explanation": None,
     "refusal": None,
+    "reply": None,
     "safe_sql": None,
     "error": None,
     "error_retryable": False,
@@ -136,6 +139,7 @@ def generate(state: AgentState) -> AgentState:
         "sql": result.sql,
         "explanation": result.explanation,
         "refusal": result.refusal,
+        "reply": result.reply,
         "attempts": attempts,
         "error": None,
     }
@@ -192,6 +196,11 @@ def refuse(state: AgentState) -> AgentState:
     return _finish(state, status="refused", answer=answer)
 
 
+def chat(state: AgentState) -> AgentState:
+    """Greeting or small talk: answer politely, no SQL needed."""
+    return _finish(state, status="ok", answer=state["reply"])
+
+
 def fail(state: AgentState) -> AgentState:
     """Out of attempts, or a problem retrying can't fix."""
     answer = (
@@ -245,8 +254,11 @@ def next_step_after_check(state: AgentState) -> str:
 
 
 def next_step_after_generate(state: AgentState) -> str:
-    if not state.get("error") and state.get("refusal"):
-        return "refuse"
+    if not state.get("error"):
+        if state.get("refusal"):
+            return "refuse"
+        if state.get("reply"):
+            return "chat"
     return next_step_after_check(state)
 
 
@@ -265,6 +277,7 @@ def build_graph(checkpointer=None):
         ("execute", execute),
         ("synthesize", synthesize),
         ("refuse", refuse),
+        ("chat", chat),
         ("fail", fail),
     ]:
         graph.add_node(name, node)
@@ -275,6 +288,7 @@ def build_graph(checkpointer=None):
     graph.add_conditional_edges("generate", next_step_after_generate, {
         "continue": "validate",
         "refuse": "refuse",
+        "chat": "chat",
         "retry": "generate",
         "give_up": "fail",
     })
@@ -289,7 +303,7 @@ def build_graph(checkpointer=None):
         "give_up": "fail",
     })
 
-    for final_node in ("synthesize", "refuse", "fail"):
+    for final_node in ("synthesize", "refuse", "chat", "fail"):
         graph.add_edge(final_node, END)
 
     return graph.compile(checkpointer=checkpointer)

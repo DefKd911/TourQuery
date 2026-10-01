@@ -26,7 +26,7 @@ app.add_middleware(
 
 
 class AskRequest(BaseModel):
-    question: str = Field(min_length=3, max_length=500)
+    question: str = Field(min_length=1, max_length=500)
     thread_id: str | None = Field(default=None, description="Send the thread_id from a previous answer to ask a follow-up.")
 
 

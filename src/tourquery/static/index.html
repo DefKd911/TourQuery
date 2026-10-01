@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TourQuery</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎾</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
@@ -314,6 +315,12 @@
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
   }
 
+  function describeHttpError(status) {
+    if (status === 422) return "That message couldn't be read. Try rephrasing it (up to 500 characters).";
+    if (status >= 500) return "The server ran into an error answering that. Please try again.";
+    return `Unexpected response from the server (${status}). Please try again.`;
+  }
+
   function timeAgo(timestamp) {
     const minutes = Math.round((Date.now() - timestamp) / 60000);
     if (minutes < 1) return "just now";
@@ -504,16 +511,22 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, thread_id: activeThreadId }),
       });
-      if (!response.ok) throw new Error(`Server returned ${response.status}`);
-      const result = await response.json();
       loader.remove();
+      if (!response.ok) {
+        addAnswer({ status: "failed", answer: describeHttpError(response.status) });
+        return;
+      }
+      const result = await response.json();
       addAnswer(result);
       rememberThread(result.thread_id, question);
       setActive(result.thread_id);
     } catch (err) {
       console.error(err);
       loader.remove();
-      addAnswer({ status: "failed", answer: "Something went wrong reaching the server. Please try again." });
+      addAnswer({
+        status: "failed",
+        answer: "Couldn't reach the server. Check your connection and try again. (On the free plan the server sleeps when idle and takes about a minute to wake up.)",
+      });
     } finally {
       busy = false;
       sendBtn.disabled = false;
