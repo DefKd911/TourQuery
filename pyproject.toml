@@ -1,0 +1,32 @@
+[project]
+name = "tourquery"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "faker>=40.39.0",
+    "fastapi>=0.142.2",
+    "langchain-google-genai>=4.4.0",
+    "langgraph>=1.2.12",
+    "langgraph-checkpoint-postgres>=3.1.2",
+    "pandas>=3.0.6",
+    "pgvector>=0.5.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.0.54",
+    "sqlglot>=30.21.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+tourquery = "tourquery:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
