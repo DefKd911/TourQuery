@@ -5,7 +5,7 @@ question into SQL, checks it for safety, runs it against Postgres, and answers i
 English — always showing the SQL it ran and the result table.
 
 **Live demo: https://tourquery.onrender.com**
-<sub>Free hosting: the first request after a quiet period takes about a minute to wake the server, and the demo shares a small daily AI quota.</sub>
+<sub>Free hosting: the first request after a quiet period takes about a minute to wake the server. The demo runs on Gemini's free tier, so it's slower than the numbers below and shares a small daily AI quota.</sub>
 
 ![TourQuery chat UI](docs/screenshot.png)
 
@@ -15,6 +15,25 @@ You:        Now just the ones he lost.                 -> 21 matches
 You:        Now only on hard courts.                   -> 14 matches
 You:        Delete all of Nadal's matches.             -> refused, nothing is run
 ```
+
+## Results
+
+Measured on a [17-question eval set](evals/questions.yaml) with hand-checked answers,
+scored by comparing query results ([full report](evals/REPORT.md)):
+
+| SQL model | Accuracy | Median time per question |
+|---|---|---|
+| **gpt-4.1** | **16/17 (94%)** on both runs | **~8–9s** |
+| **Claude Haiku 4.5** | **16/17 (94%)** on 1 run | ~9s |
+| gpt-4.1-mini | 15–16/17 across 3 runs | ~8–12s |
+| Gemini 3.8 Flash (free tier) | couldn't finish: quota limits and overload errors | ~43s+ |
+
+Every run got lookups, rankings, time series, follow-ups, the column-name trap, the
+delete request and a prompt-injection attempt right; one early run answered an update
+request with a SELECT instead of refusing (fixed with refusal examples in the prompt). The
+remaining weak spot is multi-step counting, e.g. a head-to-head self-join that
+double-counts matches. Moving from
+a "thinking" model to non-reasoning models plus caching cut the median from ~43s to ~8–9s.
 
 ---
 
@@ -27,7 +46,7 @@ own SQL.
 ```mermaid
 flowchart LR
     Q([Question]) --> R[Retrieve<br/>relevant tables]
-    R --> G[Generate SQL<br/>Gemini]
+    R --> G[Generate SQL<br/>LLM]
     G --> V[Validate<br/>sqlglot]
     V --> E[Execute<br/>read-only role]
     E --> S[Summarize<br/>answer]
@@ -47,10 +66,13 @@ alone missed obvious tables — "Djokovic's win rate on clay" didn't retrieve `p
 and expanding foreign keys in *both* directions pulled in the whole schema through the
 `players` hub table, so expansion only follows a table's own foreign keys.
 
-**2. Generate.** Gemini returns structured output: the SQL, a one-line explanation, a
-self-contained rewrite of the question (for follow-ups), and an optional refusal or
-small-talk reply. The prompt includes Postgres-specific notes learned from real failures
-(e.g. `date - date` is an integer, not an interval).
+**2. Generate.** The model — OpenAI, Anthropic or Gemini, chosen with `LLM_PROVIDER` —
+returns structured output: the SQL, a one-line explanation, a self-contained rewrite of
+the question (for follow-ups), and an optional refusal or small-talk reply. The prompt
+includes SQL and tennis notes added in response to eval failures, kept general rather than
+tied to specific test questions: `date - date` is an integer; wrap `OR` in parentheses;
+count groups with a subquery; match names case-insensitively; "winning a tournament"
+means winning its final.
 
 **3. Validate and 4. Execute** — see [Safety](#safety) below. Validator errors and
 fixable database errors (bad SQL, timeouts) go back to step 2, up to 3 attempts. API
@@ -97,8 +119,9 @@ reads real column names instead of guessing from patterns.
 
 ## Tech stack
 
-**Agent:** LangGraph, LangChain, Google Gemini (`gemini-flash-latest` for SQL,
-`gemini-3.5-flash-lite` for summaries, `gemini-embedding-001` for retrieval) ·
+**Agent:** LangGraph, LangChain; switchable LLM provider — OpenAI (gpt-4.1 for SQL,
+gpt-4.1-mini for summaries), Anthropic (Claude Haiku 4.5) or Google Gemini (3.8 Flash);
+Gemini `gemini-embedding-001` for retrieval in every setup ·
 **Data:** PostgreSQL on Neon, pgvector, SQLAlchemy, psycopg, sqlglot ·
 **App:** FastAPI, a single-file HTML/JS chat UI · **Ops:** Docker, Render, LangSmith
 tracing, pytest, uv
@@ -106,8 +129,9 @@ tracing, pytest, uv
 ## Run it locally
 
 Needs Python 3.12, [uv](https://docs.astral.sh/uv/), a Postgres database with pgvector
-(e.g. a free [Neon](https://neon.tech) project), and a
-[Gemini API key](https://aistudio.google.com/apikey).
+(e.g. a free [Neon](https://neon.tech) project), a
+[Gemini API key](https://aistudio.google.com/apikey) (always needed, for embeddings), and
+optionally an OpenAI or Anthropic key.
 
 ```bash
 uv sync
@@ -123,7 +147,10 @@ Create a `.env` file:
 | `DATABASE_URL` | owner connection, for the setup scripts only |
 | `READONLY_DATABASE_URL` | the agent's `SELECT`-only user |
 | `MEMORY_DATABASE_URL` | the conversation-memory user |
-| `GOOGLE_GEMINI_API_KEY` | Gemini |
+| `GOOGLE_GEMINI_API_KEY` | embeddings (always), and chat if `LLM_PROVIDER=gemini` |
+| `LLM_PROVIDER` | `gemini` (default), `openai` or `anthropic` |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | for the matching provider |
+| `SQL_MODEL` | optional, overrides the provider's SQL model (e.g. to compare models) |
 | `LANGSMITH_API_KEY` | optional, turns on tracing |
 
 Set up the database (run the SQL as the owner; `roles.sql` takes the two passwords as
@@ -141,7 +168,8 @@ uv run uvicorn tourquery.api:app --reload
 ```
 
 Open http://localhost:8000 for the chat, or http://localhost:8000/docs for the API.
-Tests: `uv run pytest`.
+Tests: `uv run pytest`. Eval: `uv run python evals/run_eval.py` (see the
+[report](evals/REPORT.md) for options).
 
 ## API
 
@@ -153,11 +181,11 @@ Tests: `uv run pytest`.
 
 ## Limitations
 
-- **Free AI quota:** the hosted demo shares about 20 SQL-model calls a day; after that it shows a "demo limit reached" message.
-- **Speed:** answers take roughly 20–40 seconds, mostly in the SQL-generation call (measured with LangSmith).
+- **Hosted demo runs on Gemini's free tier:** about 20 SQL-model calls a day shared by everyone (then a "demo limit reached" message), and slower answers (~40s) than the gpt-4.1 / Claude results above.
+- **Multi-step counting** is the remaining accuracy weak spot (e.g. head-to-head double-counting in some runs).
+- **Small eval:** 17 questions and 1–3 runs per model; results vary between runs even at temperature 0. Answer text isn't graded yet, only query results. See the [report](evals/REPORT.md).
 - **Data window:** answers cover 2023–2025 only, and don't always say so.
 - **Ambiguous follow-ups:** a follow-up with nothing to refer to gets a best guess rather than a clarifying question.
-- **No accuracy benchmark yet:** an evaluation set (gold questions scored by comparing result rows) is the next step.
 
 ## Project structure
 
@@ -167,12 +195,15 @@ src/tourquery/
   retrieval.py        schema RAG: pgvector similarity + foreign-key expansion
   introspection.py    reads the live schema (columns, FKs, sample values, comments)
   sql_generation.py   prompt + structured output for SQL
+  llm.py              picks the chat models for the chosen provider
   guardrails.py       sqlglot validator
   answer_synthesis.py plain-English answer from result rows
   memory.py           Postgres checkpointer (conversation memory)
+  evaluation.py       eval scoring: compares query results with gold answers
   api.py              FastAPI app
   static/index.html   chat UI
+evals/                eval questions, runner, results and report
 scripts/              data loading, schema embedding, memory setup
 sql/                  schema and database users
-tests/                guardrail tests
+tests/                guardrail and scoring tests
 ```

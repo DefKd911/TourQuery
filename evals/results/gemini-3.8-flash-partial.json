@@ -1,0 +1,80 @@
+{
+  "cases": {
+    "alcaraz_matches_2024": {
+      "id": "alcaraz_matches_2024",
+      "category": "lookup",
+      "question": "How many matches did Carlos Alcaraz play in 2024?",
+      "passed": true,
+      "reason": "numbers match",
+      "status": "ok",
+      "sql": "SELECT COUNT(*) FROM matches AS m JOIN players AS p ON (m.player1_id = p.player_id OR m.player2_id = p.player_id) WHERE p.first_name = 'Carlos' AND p.last_name = 'Alcaraz' AND m.match_date >= '2024-01-01' AND m.match_date < '2025-01-01' LIMIT 1000",
+      "attempts": 1,
+      "duration_ms": 43034,
+      "tokens": {
+        "gemini-3.8-flash": 1897,
+        "gemini-3.5-flash-lite": 321
+      },
+      "run_at": "2026-10-01T15:41:35"
+    },
+    "sinner_wins_2024": {
+      "id": "sinner_wins_2024",
+      "category": "lookup",
+      "question": "How many matches did Jannik Sinner win in 2024?",
+      "passed": false,
+      "reason": "status=failed: Sorry, I couldn't answer that after 1 attempt(s). Last error: LLM call failed: 503 UNAVAILABLE. {'error': {'code': 503, ",
+      "status": "failed",
+      "sql": null,
+      "attempts": 1,
+      "duration_ms": 72985,
+      "tokens": {},
+      "run_at": "2026-10-01T15:42:49"
+    },
+    "italian_players": {
+      "id": "italian_players",
+      "category": "lookup",
+      "question": "How many players in the database are from Italy?",
+      "passed": true,
+      "reason": "numbers match",
+      "status": "ok",
+      "sql": "SELECT COUNT(*) FROM players WHERE nationality = 'ITA' LIMIT 1000",
+      "attempts": 1,
+      "duration_ms": 21247,
+      "tokens": {
+        "gemini-3.8-flash": 1715,
+        "gemini-3.5-flash-lite": 215
+      },
+      "run_at": "2026-10-01T15:43:11"
+    },
+    "djokovic_clay_wins": {
+      "id": "djokovic_clay_wins",
+      "category": "aggregation",
+      "question": "How many matches did Novak Djokovic win on clay between 2023 and 2025?",
+      "passed": true,
+      "reason": "numbers match",
+      "status": "ok",
+      "sql": "SELECT COUNT(*) FROM matches AS m JOIN players AS p ON m.winner_id = p.player_id JOIN tournaments AS t ON m.tournament_id = t.tournament_id WHERE p.first_name = 'Novak' AND p.last_name = 'Djokovic' AND LOWER(t.surface) = 'clay' AND m.match_date >= '2023-01-01' AND m.match_date < '2026-01-01' LIMIT 1000",
+      "attempts": 1,
+      "duration_ms": 85575,
+      "tokens": {
+        "gemini-3.8-flash": 2223,
+        "gemini-3.5-flash-lite": 352
+      },
+      "run_at": "2026-10-01T15:44:38"
+    },
+    "us_open_five_setters_2024": {
+      "id": "us_open_five_setters_2024",
+      "category": "aggregation",
+      "question": "How many five-set matches were played at the 2024 US Open?",
+      "passed": false,
+      "reason": "status=failed: Sorry, I couldn't answer that after 1 attempt(s). Last error: LLM call failed: 503 UNAVAILABLE. {'error': {'code': 503, ",
+      "status": "failed",
+      "sql": null,
+      "attempts": 1,
+      "duration_ms": 62838,
+      "tokens": {},
+      "run_at": "2026-10-01T15:45:43"
+    }
+  },
+  "sql_model": "gemini-3.8-flash",
+  "summary_model": "gemini-3.5-flash-lite"
+}

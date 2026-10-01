@@ -39,7 +39,9 @@
 
 - id: djokovic_clay_wins
   category: aggregation
-  question: How many matches did Novak Djokovic win on clay between 2023 and 2025?
+  # Reworded from "between 2023 and 2025", which a model reasonably read as
+  # excluding 2025. Ambiguity in the test, not a model error.
+  question: How many matches did Novak Djokovic win on clay from 2023 through 2025?
   mode: numbers
   gold_sql: |
     SELECT COUNT(*) FROM matches m
