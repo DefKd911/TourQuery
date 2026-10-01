@@ -35,6 +35,7 @@ from tourquery.sql_generation import generate_sql
 
 MAX_ATTEMPTS = 3
 HISTORY_WINDOW = 3  # how many earlier turns the SQL model gets to see
+DEMO_LIMIT_MESSAGE = "The live demo has reached today's free AI usage limit. Please try again tomorrow."
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,8 @@ def generate(state: AgentState) -> AgentState:
     except Exception as e:
         # Rate limits or outages: a rewritten query won't fix these, and
         # retrying would only burn more quota.
-        return {"error": f"LLM call failed: {e}", "error_retryable": False, "attempts": attempts}
+        error = DEMO_LIMIT_MESSAGE if "RESOURCE_EXHAUSTED" in str(e) else f"LLM call failed: {e}"
+        return {"error": error, "error_retryable": False, "attempts": attempts}
 
     return {
         "standalone_question": result.standalone_question,
@@ -203,10 +205,13 @@ def chat(state: AgentState) -> AgentState:
 
 def fail(state: AgentState) -> AgentState:
     """Out of attempts, or a problem retrying can't fix."""
-    answer = (
-        f"Sorry, I couldn't answer that after {state['attempts']} attempt(s). "
-        f"Last error: {state.get('error')}"
-    )
+    if state.get("error") == DEMO_LIMIT_MESSAGE:
+        answer = DEMO_LIMIT_MESSAGE
+    else:
+        answer = (
+            f"Sorry, I couldn't answer that after {state['attempts']} attempt(s). "
+            f"Last error: {state.get('error')}"
+        )
     return _finish(state, status="failed", answer=answer)
 
 
