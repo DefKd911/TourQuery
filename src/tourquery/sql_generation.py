@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from tourquery.config import settings
 
-CHAT_MODEL = "gemini-flash-latest"
+CHAT_MODEL = "gemini-3.8-flash"  # pinned: "-latest" aliases can change under you and break eval comparisons
 
 
 class GeneratedSQL(BaseModel):
