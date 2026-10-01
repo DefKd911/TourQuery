@@ -7,8 +7,8 @@ changed. If a chat session resets, read this file first, then `PLAN.md` and
 
 ## Current status
 
-**Phase**: Step 12 done. Step 11 (eval) deferred until after the UI.
-**Next action**: Step 13 (chat UI).
+**Phase**: Live at https://tourquery.onrender.com (steps 13, 16, 17 done). Step 11 (eval) still deferred.
+**Next action**: Decide on the Gemini quota (billing vs. free), then eval set -> README -> CI.
 
 ## Decisions locked in so far
 
@@ -68,11 +68,11 @@ Update this table as each step starts/completes. Status values: `not started`,
 | 10 | Observability (LangSmith, logs) | done | Kept deliberately simple. LangSmith tracing turns on when `LANGSMITH_API_KEY` is in `.env` (`config.py` exports it, since LangChain reads env vars, not `.env`); project `tourquery` shows each step, prompt, SQL attempt and timing. Locally, `ask()` measures total time and tokens per model (LangChain's `UsageMetadataCallbackHandler`), logs one line per question, and returns `duration_ms`/`tokens`/`thread_id`. First real finding from traces: a 57s question spent 33.5s in the `gemini-2.5-flash` SQL call (likely its default "thinking") and 9.5s in retrieve -- inputs for Step 18. |
 | 11 | Evaluation harness | deferred | Planned: ~12-25 gold questions (gold SQL or expected status), scored by result-row match + status check, optional LLM-as-judge. Deferred to build the API + UI first; needed before Step 15 (CI) and before any speed tuning. Limited by the 20/day free quota. |
 | 12 | FastAPI service | done | Kept minimal on purpose: `src/tourquery/api.py` with `GET /health` and `POST /ask` (`{question, thread_id?}` -> `{thread_id, status, answer, sql, columns, rows, duration_ms}`), CORS for the UI (`CORS_ORIGINS`, default localhost:3000). Run: `uv run uvicorn tourquery.api:app --reload`, docs at `/docs`. Verified over HTTP, including a follow-up via `thread_id` ("top 3 by wins in 2025" -> "now only on clay"). `graph.py` gained `ask_stream()` (progress events), with `ask()` built on it, ready if the UI wants live progress later. No auth or rate limit yet -- add before a public demo, since the free LLM quota is 20/day. |
-| 13 | Chat frontend | not started | |
+| 13 | Chat frontend | done | Single HTML file (`src/tourquery/static/index.html`) served by FastAPI at `/` -- no Node.js (not installable without admin) and no build step. Normal chat layout with light tennis touches (ball logo, court green). Sidebar of past conversations kept in browser localStorage; reopening one loads its turns from `GET /threads/{id}` (question, answer, SQL, status -- result tables aren't stored). No endpoint lists everyone's threads, by design. Greetings get a friendly `reply` via a `chat` node instead of a refusal. |
 | 14 | Guardrail hardening | not started | |
 | 15 | CI/CD | not started | |
-| 16 | Full containerization | not started | |
-| 17 | Live deployment | not started | |
+| 16 | Full containerization | done | One `Dockerfile` (python:3.12-slim + uv, `uv sync --frozen --no-dev`, uvicorn on port 7860) -- API and UI are one service, so no compose file needed. |
+| 17 | Live deployment | done | https://tourquery.onrender.com -- Render free web service (Docker, Ohio region next to Neon us-east-2), auto-deploys on push to github.com/DefKd911/TourQuery. Env vars: read-only + memory DB URLs, Gemini key, LangSmith key, `PORT=7860`; `DATABASE_URL` set to the read-only URL so the owner password never leaves the dev machine. Hugging Face Spaces was tried first but Docker Spaces now need PRO. Free instance sleeps after 15 min idle (~1 min wake). When the 20/day Gemini quota is used up, visitors get a friendly "demo limit reached" message. First live bug: "hi" returned 422 (3-char minimum on questions) -- fixed. |
 | 18 | Load & cost benchmarking | not started | |
 | 19 | README polish | not started | |
 
